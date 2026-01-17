@@ -1,0 +1,57 @@
+name: External Conformance Test
+
+# This workflow uses the external mcp-conformance-action to verify
+# MCP protocol compliance. It complements the internal conformance
+# script by providing standardized testing that's consistent with
+# other MCP server implementations.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'cmd/**'
+      - 'pkg/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: SamMorrowDrums/mcp-conformance-action@v2.2.0
+        with:
+          setup_go: 'true'
+          install_command: go mod download
+          start_command: go run ./cmd/github-mcp-server stdio
+          env_vars: |
+            GITHUB_PERSONAL_ACCESS_TOKEN=test-token
+          configurations: |
+            [
+              {"name": "default", "args": ""},
+              {"name": "read-only", "args": "--read-only"},
+              {"name": "dynamic-toolsets", "args": "--dynamic-toolsets"},
+              {"name": "toolsets-all", "args": "--toolsets=all"},
+              {"name": "toolsets-repos", "args": "--toolsets=repos"},
+              {"name": "toolsets-issues", "args": "--toolsets=issues"}
+            ]
+
+      - name: Add interpretation note
+        if: always()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "ℹ️ **External Conformance Test**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This workflow uses [mcp-conformance-action](https://github.com/SamMorrowDrums/mcp-conformance-action) v2.2.0" >> $GITHUB_STEP_SUMMARY
+          echo "for standardized MCP protocol compliance testing." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "For detailed branch-to-branch comparisons, see the internal conformance workflow." >> $GITHUB_STEP_SUMMARY
