@@ -220,6 +220,10 @@ type StdioServerConfig struct {
 	// explicitly listed in EnabledTools.
 	ExcludeTools []string
 
+	// UseVariants enables the MCP variants extension (SEP-2053), exposing each
+	// toolset as a separate variant instead of registering all tools on one server.
+	UseVariants bool
+
 	// RepoAccessCacheTTL overrides the default TTL for repository access cache entries.
 	RepoAccessCacheTTL *time.Duration
 }
@@ -246,7 +250,7 @@ func RunStdioServer(cfg StdioServerConfig) error {
 		slogHandler = slog.NewTextHandler(logOutput, &slog.HandlerOptions{Level: slog.LevelInfo})
 	}
 	logger := slog.New(slogHandler)
-	logger.Info("starting server", "version", cfg.Version, "host", cfg.Host, "dynamicToolsets", cfg.DynamicToolsets, "readOnly", cfg.ReadOnly, "lockdownEnabled", cfg.LockdownMode)
+	logger.Info("starting server", "version", cfg.Version, "host", cfg.Host, "dynamicToolsets", cfg.DynamicToolsets, "readOnly", cfg.ReadOnly, "lockdownEnabled", cfg.LockdownMode, "useVariants", cfg.UseVariants)
 
 	// Fetch token scopes for scope-based tool filtering (PAT tokens only)
 	// Only classic PATs (ghp_ prefix) return OAuth scopes via X-OAuth-Scopes header.
@@ -264,7 +268,7 @@ func RunStdioServer(cfg StdioServerConfig) error {
 		logger.Debug("skipping scope filtering for non-PAT token")
 	}
 
-	ghServer, err := NewStdioMCPServer(ctx, github.MCPServerConfig{
+	mcpCfg := github.MCPServerConfig{
 		Version:           cfg.Version,
 		Host:              cfg.Host,
 		Token:             cfg.Token,
@@ -281,7 +285,14 @@ func RunStdioServer(cfg StdioServerConfig) error {
 		Logger:            logger,
 		RepoAccessTTL:     cfg.RepoAccessCacheTTL,
 		TokenScopes:       tokenScopes,
-	})
+	}
+
+	// In variants mode, each toolset becomes a separate variant
+	if cfg.UseVariants {
+		return runVariantsStdioServer(ctx, mcpCfg, cfg, logger, t, dumpTranslations)
+	}
+
+	ghServer, err := NewStdioMCPServer(ctx, mcpCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create MCP server: %w", err)
 	}
